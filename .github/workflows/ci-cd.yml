@@ -1,0 +1,60 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: sizeconv
+          - os: windows-latest
+            binary: sizeconv.exe
+          - os: macos-latest
+            binary: sizeconv
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+
+      - name: Set up Go and restore cache
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Static analysis
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -v -count=1 ./...
+
+      - name: Build executable
+        run: go build -trimpath -o dist/${{ matrix.binary }} .
+
+      - name: Smoke test
+        run: ./dist/${{ matrix.binary }} "1.5 GiB"
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: sizeconv-${{ matrix.os }}
+          path: dist/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 14
